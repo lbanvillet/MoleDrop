@@ -45,16 +45,16 @@ public class GameActivity extends SimpleBaseGameActivity implements IAcceleratio
     // ===========================================================
     // Fields
     // ===========================================================
-    private BitmapTextureAtlas mBitmapTextureAtlas;
+    private BitmapTextureAtlas bitmapTextureAtlas;
 
-    private Scene mScene;
+    private Scene scene;
 
-    protected ITiledTextureRegion mBoxFaceTextureRegion;
-    protected ITiledTextureRegion mCircleFaceTextureRegion;
+    protected ITiledTextureRegion boxFaceTextureRegion;
+    protected ITiledTextureRegion circleFaceTextureRegion;
 
-    protected PhysicsWorld mPhysicsWorld;
+    protected PhysicsWorld physicsWorld;
 
-    private int mFaceCount = 0;
+    private int faceCount = 0;
 
     // ===========================================================
     // Methods for/from SuperClass/Interfaces
@@ -73,21 +73,21 @@ public class GameActivity extends SimpleBaseGameActivity implements IAcceleratio
     public void onCreateResources() {
         BitmapTextureAtlasTextureRegionFactory.setAssetBasePath("gfx/");
 
-        this.mBitmapTextureAtlas = new BitmapTextureAtlas(this.getTextureManager(), 64, 64, TextureOptions.BILINEAR);
-        this.mBoxFaceTextureRegion = BitmapTextureAtlasTextureRegionFactory.createTiledFromAsset(this.mBitmapTextureAtlas, this, "face_box_tiled.png", 0, 0, 2, 1); // 64x32
-        this.mCircleFaceTextureRegion = BitmapTextureAtlasTextureRegionFactory.createTiledFromAsset(this.mBitmapTextureAtlas, this, "face_circle_tiled.png", 0, 32, 2, 1); // 64x32
-        this.mBitmapTextureAtlas.load();
+        this.bitmapTextureAtlas = new BitmapTextureAtlas(this.getTextureManager(), 64, 64, TextureOptions.BILINEAR);
+        this.boxFaceTextureRegion = BitmapTextureAtlasTextureRegionFactory.createTiledFromAsset(this.bitmapTextureAtlas, this, "face_box_tiled.png", 0, 0, 2, 1); // 64x32
+        this.circleFaceTextureRegion = BitmapTextureAtlasTextureRegionFactory.createTiledFromAsset(this.bitmapTextureAtlas, this, "face_circle_tiled.png", 0, 32, 2, 1); // 64x32
+        this.bitmapTextureAtlas.load();
     }
 
     @Override
     public Scene onCreateScene() {
         this.mEngine.registerUpdateHandler(new FPSLogger());
 
-        this.mScene = new Scene();
-        this.mScene.setBackground(new Background(0, 0, 0));
-        this.mScene.setOnSceneTouchListener(this);
+        this.scene = new Scene();
+        this.scene.setBackground(new Background(0, 0, 0));
+        this.scene.setOnSceneTouchListener(this);
 
-        this.mPhysicsWorld = new PhysicsWorld(new Vector2(0, SensorManager.GRAVITY_EARTH), false);
+        this.physicsWorld = new PhysicsWorld(new Vector2(0, SensorManager.GRAVITY_EARTH), false);
 
         final VertexBufferObjectManager vertexBufferObjectManager = this.getVertexBufferObjectManager();
         final Rectangle ground = new Rectangle(0, CAMERA_HEIGHT - 2, CAMERA_WIDTH, 2, vertexBufferObjectManager);
@@ -96,24 +96,24 @@ public class GameActivity extends SimpleBaseGameActivity implements IAcceleratio
         final Rectangle right = new Rectangle(CAMERA_WIDTH - 2, 0, 2, CAMERA_HEIGHT, vertexBufferObjectManager);
 
         final FixtureDef wallFixtureDef = PhysicsFactory.createFixtureDef(0, 0.5f, 0.5f);
-        PhysicsFactory.createBoxBody(this.mPhysicsWorld, ground, BodyDef.BodyType.StaticBody, wallFixtureDef);
-        PhysicsFactory.createBoxBody(this.mPhysicsWorld, roof, BodyDef.BodyType.StaticBody, wallFixtureDef);
-        PhysicsFactory.createBoxBody(this.mPhysicsWorld, left, BodyDef.BodyType.StaticBody, wallFixtureDef);
-        PhysicsFactory.createBoxBody(this.mPhysicsWorld, right, BodyDef.BodyType.StaticBody, wallFixtureDef);
+        PhysicsFactory.createBoxBody(this.physicsWorld, ground, BodyDef.BodyType.StaticBody, wallFixtureDef);
+        PhysicsFactory.createBoxBody(this.physicsWorld, roof, BodyDef.BodyType.StaticBody, wallFixtureDef);
+        PhysicsFactory.createBoxBody(this.physicsWorld, left, BodyDef.BodyType.StaticBody, wallFixtureDef);
+        PhysicsFactory.createBoxBody(this.physicsWorld, right, BodyDef.BodyType.StaticBody, wallFixtureDef);
 
-        this.mScene.attachChild(ground);
-        this.mScene.attachChild(roof);
-        this.mScene.attachChild(left);
-        this.mScene.attachChild(right);
+        this.scene.attachChild(ground);
+        this.scene.attachChild(roof);
+        this.scene.attachChild(left);
+        this.scene.attachChild(right);
 
-        this.mScene.registerUpdateHandler(this.mPhysicsWorld);
+        this.scene.registerUpdateHandler(this.physicsWorld);
 
-        return this.mScene;
+        return this.scene;
     }
 
     @Override
     public boolean onSceneTouchEvent(final Scene pScene, final TouchEvent pSceneTouchEvent) {
-        if (this.mPhysicsWorld != null) {
+        if (this.physicsWorld != null) {
             if (pSceneTouchEvent.isActionDown()) {
                 this.addFace(pSceneTouchEvent.getX(), pSceneTouchEvent.getY());
                 return true;
@@ -130,7 +130,7 @@ public class GameActivity extends SimpleBaseGameActivity implements IAcceleratio
     @Override
     public void onAccelerationChanged(final AccelerationData pAccelerationData) {
         final Vector2 gravity = Vector2Pool.obtain(pAccelerationData.getX(), pAccelerationData.getY());
-        this.mPhysicsWorld.setGravity(gravity);
+        this.physicsWorld.setGravity(gravity);
         Vector2Pool.recycle(gravity);
     }
 
@@ -153,27 +153,27 @@ public class GameActivity extends SimpleBaseGameActivity implements IAcceleratio
     // ===========================================================
 
     private void addFace(final float pX, final float pY) {
-        this.mFaceCount++;
-        Debug.d("Faces: " + this.mFaceCount);
+        this.faceCount++;
+        Debug.d("Faces: " + this.faceCount);
 
         final AnimatedSprite face;
         final Body body;
 
         final FixtureDef objectFixtureDef = PhysicsFactory.createFixtureDef(1, 0.5f, 0.5f);
 
-        if (this.mFaceCount % 2 == 0) {
-            face = new AnimatedSprite(pX, pY, this.mCircleFaceTextureRegion, this.getVertexBufferObjectManager());
+        if (this.faceCount % 2 == 0) {
+            face = new AnimatedSprite(pX, pY, this.circleFaceTextureRegion, this.getVertexBufferObjectManager());
             face.setScale(MathUtils.random(0.5f, 1.25f));
-            body = PhysicsFactory.createCircleBody(this.mPhysicsWorld, face, BodyDef.BodyType.DynamicBody, objectFixtureDef);
+            body = PhysicsFactory.createCircleBody(this.physicsWorld, face, BodyDef.BodyType.DynamicBody, objectFixtureDef);
         } else {
-            face = new AnimatedSprite(pX, pY, this.mBoxFaceTextureRegion, this.getVertexBufferObjectManager());
+            face = new AnimatedSprite(pX, pY, this.boxFaceTextureRegion, this.getVertexBufferObjectManager());
             face.setScale(MathUtils.random(0.5f, 1.25f));
-            body = PhysicsFactory.createBoxBody(this.mPhysicsWorld, face, BodyDef.BodyType.DynamicBody, objectFixtureDef);
+            body = PhysicsFactory.createBoxBody(this.physicsWorld, face, BodyDef.BodyType.DynamicBody, objectFixtureDef);
         }
 
         face.animate(200);
 
-        this.mScene.attachChild(face);
-        this.mPhysicsWorld.registerPhysicsConnector(new PhysicsConnector(face, body, true, true));
+        this.scene.attachChild(face);
+        this.physicsWorld.registerPhysicsConnector(new PhysicsConnector(face, body, true, true));
     }
 }
