@@ -1,60 +1,63 @@
 package banvillet.moledrop;
 
 import android.hardware.SensorManager;
-import android.widget.Toast;
+import android.util.Log;
 
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
-import com.badlogic.gdx.physics.box2d.FixtureDef;
 
-import org.andengine.engine.camera.Camera;
+import org.andengine.engine.camera.SmoothCamera;
+import org.andengine.engine.handler.timer.ITimerCallback;
+import org.andengine.engine.handler.timer.TimerHandler;
 import org.andengine.engine.options.EngineOptions;
 import org.andengine.engine.options.ScreenOrientation;
-import org.andengine.engine.options.resolutionpolicy.RatioResolutionPolicy;
-import org.andengine.entity.primitive.Rectangle;
 import org.andengine.entity.scene.IOnSceneTouchListener;
 import org.andengine.entity.scene.Scene;
 import org.andengine.entity.scene.background.Background;
-import org.andengine.entity.sprite.AnimatedSprite;
 import org.andengine.entity.util.FPSLogger;
-import org.andengine.extension.physics.box2d.PhysicsConnector;
-import org.andengine.extension.physics.box2d.PhysicsFactory;
 import org.andengine.extension.physics.box2d.PhysicsWorld;
-import org.andengine.extension.physics.box2d.util.Vector2Pool;
 import org.andengine.input.sensor.acceleration.AccelerationData;
 import org.andengine.input.sensor.acceleration.IAccelerationListener;
 import org.andengine.input.touch.TouchEvent;
-import org.andengine.opengl.texture.TextureOptions;
-import org.andengine.opengl.texture.atlas.bitmap.BitmapTextureAtlas;
+import org.andengine.input.touch.controller.MultiTouchController;
+import org.andengine.input.touch.detector.PinchZoomDetector;
+import org.andengine.input.touch.detector.ScrollDetector;
+import org.andengine.input.touch.detector.SurfaceScrollDetector;
 import org.andengine.opengl.texture.atlas.bitmap.BitmapTextureAtlasTextureRegionFactory;
-import org.andengine.opengl.texture.region.ITiledTextureRegion;
-import org.andengine.opengl.vbo.VertexBufferObjectManager;
 import org.andengine.ui.activity.SimpleBaseGameActivity;
 import org.andengine.util.debug.Debug;
-import org.andengine.util.math.MathUtils;
+import org.andengine.util.level.LevelLoader;
 
-public class GameActivity extends SimpleBaseGameActivity implements IAccelerationListener, IOnSceneTouchListener {
+import java.io.IOException;
+
+import banvillet.moledrop.camera.CroppedResolutionPolicy;
+import banvillet.moledrop.level.CustomLevelLoader;
+
+public class GameActivity extends SimpleBaseGameActivity implements IAccelerationListener, IOnSceneTouchListener, ScrollDetector.IScrollDetectorListener, PinchZoomDetector.IPinchZoomDetectorListener {
 
     // ===========================================================
     // Constants
     // ===========================================================
-    protected static final int CAMERA_WIDTH = 720;
-    protected static final int CAMERA_HEIGHT = 480;
+    private static final int CAMERA_WIDTH = 480;
+    private static final int CAMERA_HEIGHT = 320;
+    private static final int CAMERA_INIT_VELOCITY = 200;
+    private static final int CAMERA_MAX_VELOCITY = 5000;
+    private static final float CAMERA_INIT_ZOOM_SPEED = 0.4f;
+    private static final float CAMERA_MAX_ZOOM_SPEED = 10;
+    private static final float MIN_ZOOM_FACTOR = 0.25f;
+    private static final float MAX_ZOOM_FACTOR = 2f;
 
     // ===========================================================
     // Fields
     // ===========================================================
-    private BitmapTextureAtlas bitmapTextureAtlas;
+    public Scene scene;
+    public PhysicsWorld physicsWorld;
+    public GameFactory gameFactory;
 
-    private Scene scene;
-
-    protected ITiledTextureRegion boxFaceTextureRegion;
-    protected ITiledTextureRegion circleFaceTextureRegion;
-
-    protected PhysicsWorld physicsWorld;
-
-    private int faceCount = 0;
+    private SmoothCamera camera;
+    private SurfaceScrollDetector scrollDetector;
+    private PinchZoomDetector pinchZoomDetector;
+    private float pinchZoomStartedCameraZoomFactor;
 
     // ===========================================================
     // Methods for/from SuperClass/Interfaces
@@ -62,118 +65,177 @@ public class GameActivity extends SimpleBaseGameActivity implements IAcceleratio
 
     @Override
     public EngineOptions onCreateEngineOptions() {
-        Toast.makeText(this, "Touch the screen to add objects.", Toast.LENGTH_LONG).show();
-
-        final Camera camera = new Camera(0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
-
-        return new EngineOptions(true, ScreenOrientation.LANDSCAPE_FIXED, new RatioResolutionPolicy(CAMERA_WIDTH, CAMERA_HEIGHT), camera);
+        this.camera = new SmoothCamera(0, 0, CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_MAX_VELOCITY, CAMERA_INIT_VELOCITY, CAMERA_INIT_ZOOM_SPEED);
+        return new EngineOptions(true, ScreenOrientation.LANDSCAPE_FIXED, new CroppedResolutionPolicy(CAMERA_WIDTH, CAMERA_HEIGHT), this.camera);
     }
 
     @Override
     public void onCreateResources() {
         BitmapTextureAtlasTextureRegionFactory.setAssetBasePath("gfx/");
-
-        this.bitmapTextureAtlas = new BitmapTextureAtlas(this.getTextureManager(), 64, 64, TextureOptions.BILINEAR);
-        this.boxFaceTextureRegion = BitmapTextureAtlasTextureRegionFactory.createTiledFromAsset(this.bitmapTextureAtlas, this, "face_box_tiled.png", 0, 0, 2, 1); // 64x32
-        this.circleFaceTextureRegion = BitmapTextureAtlasTextureRegionFactory.createTiledFromAsset(this.bitmapTextureAtlas, this, "face_circle_tiled.png", 0, 32, 2, 1); // 64x32
-        this.bitmapTextureAtlas.load();
+        this.gameFactory = new GameFactory(this);
     }
 
     @Override
     public Scene onCreateScene() {
+
+        //Set the engine
+        this.mEngine.setTouchController(new MultiTouchController());
         this.mEngine.registerUpdateHandler(new FPSLogger());
 
+        //Create the scene and world
         this.scene = new Scene();
         this.scene.setBackground(new Background(0, 0, 0));
         this.scene.setOnSceneTouchListener(this);
-
+        this.scrollDetector = new SurfaceScrollDetector(this);
+        this.pinchZoomDetector = new PinchZoomDetector(this);
         this.physicsWorld = new PhysicsWorld(new Vector2(0, SensorManager.GRAVITY_EARTH), false);
 
-        final VertexBufferObjectManager vertexBufferObjectManager = this.getVertexBufferObjectManager();
-        final Rectangle ground = new Rectangle(0, CAMERA_HEIGHT - 2, CAMERA_WIDTH, 2, vertexBufferObjectManager);
-        final Rectangle roof = new Rectangle(0, 0, CAMERA_WIDTH, 2, vertexBufferObjectManager);
-        final Rectangle left = new Rectangle(0, 0, 2, CAMERA_HEIGHT, vertexBufferObjectManager);
-        final Rectangle right = new Rectangle(CAMERA_WIDTH - 2, 0, 2, CAMERA_HEIGHT, vertexBufferObjectManager);
+        //Level loader
+        final LevelLoader levelLoader = new CustomLevelLoader(this);
 
-        final FixtureDef wallFixtureDef = PhysicsFactory.createFixtureDef(0, 0.5f, 0.5f);
-        PhysicsFactory.createBoxBody(this.physicsWorld, ground, BodyDef.BodyType.StaticBody, wallFixtureDef);
-        PhysicsFactory.createBoxBody(this.physicsWorld, roof, BodyDef.BodyType.StaticBody, wallFixtureDef);
-        PhysicsFactory.createBoxBody(this.physicsWorld, left, BodyDef.BodyType.StaticBody, wallFixtureDef);
-        PhysicsFactory.createBoxBody(this.physicsWorld, right, BodyDef.BodyType.StaticBody, wallFixtureDef);
+        try {
+            levelLoader.loadLevelFromAsset(this.getAssets(), "example.lvl");
+        } catch (final IOException e) {
+            Debug.e(e);
+        }
 
-        this.scene.attachChild(ground);
-        this.scene.attachChild(roof);
-        this.scene.attachChild(left);
-        this.scene.attachChild(right);
+        //Populate the scene with sample elements
+//        final Rectangle jump = new Rectangle(CAMERA_WIDTH / 4 - 100, CAMERA_HEIGHT / 2, 100, 10, vertexBufferObjectManager);
+//        final FixtureDef jumpFixtureDef = PhysicsFactory.createFixtureDef(0, 1f, 0.5f);
+//        PhysicsFactory.createBoxBody(this.physicsWorld, jump, BodyDef.BodyType.StaticBody, jumpFixtureDef);
+//        this.scene.attachChild(jump);
 
+        //Attach world to the scene
         this.scene.registerUpdateHandler(this.physicsWorld);
-
         return this.scene;
     }
 
     @Override
     public boolean onSceneTouchEvent(final Scene pScene, final TouchEvent pSceneTouchEvent) {
-        if (this.physicsWorld != null) {
-            if (pSceneTouchEvent.isActionDown()) {
-                this.addFace(pSceneTouchEvent.getX(), pSceneTouchEvent.getY());
-                return true;
-            }
+
+        if (this.camera.getMaxVelocityY() != CAMERA_MAX_VELOCITY || this.camera.getMaxZoomFactorChange() != CAMERA_MAX_ZOOM_SPEED) {
+            this.camera.setCenter(this.camera.getCenterX(), this.camera.getCenterY());
+            this.camera.setZoomFactor(this.camera.getZoomFactor());
+            this.camera.setMaxVelocityY(CAMERA_MAX_VELOCITY);
+            this.camera.setMaxZoomFactorChange(CAMERA_MAX_ZOOM_SPEED);
         }
-        return false;
+
+        if (this.pinchZoomDetector != null) {
+            this.pinchZoomDetector.onTouchEvent(pSceneTouchEvent);
+
+            if (this.pinchZoomDetector.isZooming()) {
+                this.scrollDetector.setEnabled(false);
+            } else {
+                if (pSceneTouchEvent.isActionDown()) {
+                    this.scrollDetector.setEnabled(true);
+                    this.scene.attachChild(this.gameFactory.createBoxFace(pSceneTouchEvent.getX(), pSceneTouchEvent.getY(), 0, 0, BodyDef.BodyType.DynamicBody));
+                }
+                this.scrollDetector.onTouchEvent(pSceneTouchEvent);
+            }
+        } else {
+            this.scrollDetector.onTouchEvent(pSceneTouchEvent);
+        }
+        return true;
     }
 
     @Override
     public void onAccelerationAccuracyChanged(final AccelerationData pAccelerationData) {
-
     }
 
     @Override
     public void onAccelerationChanged(final AccelerationData pAccelerationData) {
-        final Vector2 gravity = Vector2Pool.obtain(pAccelerationData.getX(), pAccelerationData.getY());
-        this.physicsWorld.setGravity(gravity);
-        Vector2Pool.recycle(gravity);
     }
 
     @Override
     public void onResumeGame() {
         super.onResumeGame();
-
         this.enableAccelerationSensor(this);
     }
 
     @Override
     public void onPauseGame() {
         super.onPauseGame();
-
         this.disableAccelerationSensor();
     }
+
+    @Override
+    public void onScrollStarted(ScrollDetector pScrollDetector, int pPointerID, float pDistanceX, float pDistanceY) {
+    }
+
+    @Override
+    public void onScroll(ScrollDetector pScrollDetector, int pPointerID, float pDistanceX, float pDistanceY) {
+        final float zoomFactor = this.camera.getZoomFactor();
+        this.camera.offsetCenter(-pDistanceX / zoomFactor, -pDistanceY / zoomFactor);
+    }
+
+    @Override
+    public void onScrollFinished(ScrollDetector pScrollDetector, int pPointerID, float pDistanceX, float pDistanceY) {
+    }
+
+    @Override
+    public void onPinchZoomStarted(final PinchZoomDetector pPinchZoomDetector, final TouchEvent pTouchEvent) {
+        this.pinchZoomStartedCameraZoomFactor = this.camera.getZoomFactor();
+    }
+
+    @Override
+    public void onPinchZoom(final PinchZoomDetector pPinchZoomDetector, final TouchEvent pTouchEvent, final float pZoomFactor) {
+        final float newZoomFactor = this.pinchZoomStartedCameraZoomFactor * pZoomFactor;
+        if(newZoomFactor < MAX_ZOOM_FACTOR && newZoomFactor > MIN_ZOOM_FACTOR){
+            this.camera.setZoomFactor(newZoomFactor);
+        }
+    }
+
+    @Override
+    public void onPinchZoomFinished(final PinchZoomDetector pPinchZoomDetector, final TouchEvent pTouchEvent, final float pZoomFactor) {
+        final float newZoomFactor = this.pinchZoomStartedCameraZoomFactor * pZoomFactor;
+        if(newZoomFactor < MAX_ZOOM_FACTOR && newZoomFactor > MIN_ZOOM_FACTOR){
+            this.camera.setZoomFactor(newZoomFactor);
+        }
+    }
+
 
     // ===========================================================
     // Methods
     // ===========================================================
 
-    private void addFace(final float pX, final float pY) {
-        this.faceCount++;
-        Debug.d("Faces: " + this.faceCount);
+    public void initialiseLevel(final float width, final float height) {
 
-        final AnimatedSprite face;
-        final Body body;
+        //Initialise the camera with smooth moves
+        this.camera.setBounds(0, -40, width, height + 40);
+        this.camera.setBoundsEnabled(true);
+        scene.registerUpdateHandler(new TimerHandler(1, true, getInitKinematicFirstPhase(width, height)));
 
-        final FixtureDef objectFixtureDef = PhysicsFactory.createFixtureDef(1, 0.5f, 0.5f);
+        //Create borders
+        this.scene.attachChild(this.gameFactory.createWall(0, height - 2, width, 2));
+        this.scene.attachChild(this.gameFactory.createWall(0f, 0f, width, 2));
+        this.scene.attachChild(this.gameFactory.createWall(0, 0, 2, height));
+        this.scene.attachChild(this.gameFactory.createWall(width - 2, 0, 2, height));
+    }
 
-        if (this.faceCount % 2 == 0) {
-            face = new AnimatedSprite(pX, pY, this.circleFaceTextureRegion, this.getVertexBufferObjectManager());
-            face.setScale(MathUtils.random(0.5f, 1.25f));
-            body = PhysicsFactory.createCircleBody(this.physicsWorld, face, BodyDef.BodyType.DynamicBody, objectFixtureDef);
-        } else {
-            face = new AnimatedSprite(pX, pY, this.boxFaceTextureRegion, this.getVertexBufferObjectManager());
-            face.setScale(MathUtils.random(0.5f, 1.25f));
-            body = PhysicsFactory.createBoxBody(this.physicsWorld, face, BodyDef.BodyType.DynamicBody, objectFixtureDef);
-        }
+    private ITimerCallback getInitKinematicFirstPhase(final float width, final float height){
+        return new ITimerCallback() {
+            @Override
+            public void onTimePassed(final TimerHandler pTimerHandler) {
 
-        face.animate(200);
+                //If the screen has not been touched by player
+                if (GameActivity.this.camera.getMaxVelocityY() != CAMERA_MAX_VELOCITY) {
+                    GameActivity.this.camera.setCenter(width / 2, height);
+                    GameActivity.this.scene.registerUpdateHandler(new TimerHandler(4.5f, true, getInitKinematicSecondPhase(width, height)));
+                }
+            }
+        };
+    }
 
-        this.scene.attachChild(face);
-        this.physicsWorld.registerPhysicsConnector(new PhysicsConnector(face, body, true, true));
+    private ITimerCallback getInitKinematicSecondPhase(final float width, final float height){
+        return new ITimerCallback() {
+            @Override
+            public void onTimePassed(final TimerHandler pTimerHandler) {
+
+                //If the screen has not been touched by player
+                if (GameActivity.this.camera.getMaxVelocityY() != CAMERA_MAX_VELOCITY) {
+                    GameActivity.this.camera.setZoomFactor(MIN_ZOOM_FACTOR);
+                }
+            }
+        };
     }
 }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<level width="480" height="320">
+<level width="480" height="1000">
 	<entity x="48" y="16" width="16" height="16" type="box"/>
 	<entity x="48" y="32" width="16" height="16" type="box"/>
 	<entity x="48" y="48" width="16" height="16" type="box"/>
@@ -94,4 +94,11 @@
 	<entity x="272" y="240" width="16" height="16" type="box"/>
 	<entity x="288" y="224" width="16" height="16" type="box"/>
 	<entity x="240" y="208" width="16" height="16" type="circle"/>
+
+	<entity x="208" y="660" width="32" height="32" type="hexagon"/>
+	<entity x="256" y="660" width="32" height="32" type="hexagon"/>
+	<entity x="240" y="708" width="16" height="16" type="circle"/>
+	<entity x="208" y="860" width="32" height="32" type="hexagon"/>
+	<entity x="256" y="860" width="32" height="32" type="hexagon"/>
+	<entity x="240" y="908" width="16" height="16" type="circle"/>
 </level>
