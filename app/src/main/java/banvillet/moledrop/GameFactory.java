@@ -1,22 +1,34 @@
 package banvillet.moledrop;
 
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.joints.RevoluteJointDef;
 
+import org.andengine.entity.primitive.Mesh;
 import org.andengine.entity.primitive.Rectangle;
 import org.andengine.entity.scene.Scene;
 import org.andengine.entity.sprite.AnimatedSprite;
+import org.andengine.entity.sprite.Sprite;
 import org.andengine.extension.physics.box2d.PhysicsConnector;
 import org.andengine.extension.physics.box2d.PhysicsFactory;
 import org.andengine.extension.physics.box2d.PhysicsWorld;
+import org.andengine.extension.physics.box2d.util.constants.PhysicsConstants;
+import org.andengine.extension.physics.box2d.util.triangulation.EarClippingTriangulator;
 import org.andengine.opengl.texture.TextureOptions;
 import org.andengine.opengl.texture.atlas.bitmap.BitmapTextureAtlas;
 import org.andengine.opengl.texture.atlas.bitmap.BitmapTextureAtlasTextureRegionFactory;
 import org.andengine.opengl.texture.region.ITiledTextureRegion;
+import org.andengine.opengl.texture.region.TextureRegion;
 import org.andengine.opengl.texture.region.TiledTextureRegion;
 import org.andengine.opengl.vbo.VertexBufferObjectManager;
+import org.andengine.util.color.Color;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import banvillet.moledrop.physics.PhysicsHelper;
 
 /**
  * Contains the game activity: scene and physical world.
@@ -53,11 +65,126 @@ public class GameFactory {
     // Methods
     // ===========================================================
 
-    public Rectangle createWall(final float x, final float y, final float width, final float height) {
-        final Rectangle rectangle = new Rectangle(x, y, width, height, this.gameActivity.getVertexBufferObjectManager());
-        final FixtureDef wallFixtureDef = PhysicsFactory.createFixtureDef(0, 0.5f, 0.5f);
-        PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, rectangle, BodyDef.BodyType.StaticBody, wallFixtureDef);
-        return rectangle;
+    public void createGroundAndHole(final float width, final float height) {
+
+        float hole_X = 200;
+        final FixtureDef solidFixtureDef = PhysicsFactory.createFixtureDef(0, 0.5f, 0.5f);
+
+        //Set ground texture on the left
+        BitmapTextureAtlas groundTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 256, 128, TextureOptions.REPEATING_NEAREST_PREMULTIPLYALPHA);
+        TextureRegion groundTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(groundTexture, this.gameActivity, "ground.png", 0, 0);
+        groundTextureRegion.setTextureWidth(1280);
+        groundTexture.load();
+        Sprite groundSpriteLeft = new Sprite(-1280 + hole_X, height, groundTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, groundSpriteLeft, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(groundSpriteLeft);
+
+        //Set ground texture on the right
+        Sprite groundSpriteRight = new Sprite(hole_X + 192, height, groundTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, groundSpriteRight, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(groundSpriteRight);
+
+        //Set grass texture on the left
+        BitmapTextureAtlas grassTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 256, 5, TextureOptions.REPEATING_NEAREST_PREMULTIPLYALPHA);
+        TextureRegion grassTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(grassTexture, this.gameActivity, "grass.png", 0, 0);
+        grassTextureRegion.setTextureWidth(1280);
+        grassTexture.load();
+        Sprite grassSpriteLeft = new Sprite(-1280 + hole_X, height - 5, grassTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        this.gameActivity.scene.attachChild(grassSpriteLeft);
+
+        //Set grass texture on the right
+        Sprite grassSpriteRight = new Sprite(hole_X + 192, height - 5, grassTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        this.gameActivity.scene.attachChild(grassSpriteRight);
+
+        //Set hole left
+        BitmapTextureAtlas holeLeftTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 64, 128, TextureOptions.DEFAULT);
+        TextureRegion holeLeftTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(holeLeftTexture, this.gameActivity, "hole_left.png", 0, 0);
+        holeLeftTexture.load();
+        Sprite holeLeftSprite = new Sprite(hole_X, height, holeLeftTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, holeLeftSprite, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(holeLeftSprite);
+
+        //Set hole right
+        BitmapTextureAtlas holeRightTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 64, 128, TextureOptions.DEFAULT);
+        TextureRegion holeRightTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(holeRightTexture, this.gameActivity, "hole_right.png", 0, 0);
+        holeRightTexture.load();
+        Sprite holeRightSprite = new Sprite(hole_X + 128, height, holeRightTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, holeRightSprite, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(holeRightSprite);
+
+        //Set hole triangle left
+        BitmapTextureAtlas holeTriangleLeftTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 64, 64, TextureOptions.DEFAULT);
+        TextureRegion holeTriangleLeftTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(holeTriangleLeftTexture, this.gameActivity, "hole_triangle_left.png", 0, 0);
+        holeTriangleLeftTexture.load();
+        Sprite holeTriangleLeftSprite = new Sprite(hole_X, height - 64, holeTriangleLeftTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsHelper.createTriangleBody(this.gameActivity.physicsWorld, holeTriangleLeftSprite, BodyDef.BodyType.StaticBody, solidFixtureDef, false);
+        this.gameActivity.scene.attachChild(holeTriangleLeftSprite);
+
+        //Set hole triangle right
+        BitmapTextureAtlas holeTriangleRightTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 64, 64, TextureOptions.DEFAULT);
+        TextureRegion holeTriangleRightTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(holeTriangleRightTexture, this.gameActivity, "hole_triangle_right.png", 0, 0);
+        holeTriangleRightTexture.load();
+        Sprite holeTriangleRightSprite = new Sprite(hole_X + 128, height - 64, holeTriangleRightTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsHelper.createTriangleBody(this.gameActivity.physicsWorld, holeTriangleRightSprite, BodyDef.BodyType.StaticBody, solidFixtureDef, true);
+        this.gameActivity.scene.attachChild(holeTriangleRightSprite);
+
+        //Set hole bottom
+        BitmapTextureAtlas holeBottomTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 64, 68, TextureOptions.DEFAULT);
+        TextureRegion holeBottomTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(holeBottomTexture, this.gameActivity, "hole_bottom.png", 0, 0);
+        holeBottomTexture.load();
+        Sprite holeBottomSprite = new Sprite(hole_X + 64, height + 60, holeBottomTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, holeBottomSprite, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(holeBottomSprite);
+
+        //Set hole middle
+        BitmapTextureAtlas holeMiddleTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 64, 60, TextureOptions.DEFAULT);
+        TextureRegion holeMiddleTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(holeMiddleTexture, this.gameActivity, "hole_middle.png", 0, 0);
+        holeMiddleTexture.load();
+        Sprite holeMiddleSprite = new Sprite(hole_X + 64, height, holeMiddleTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        this.gameActivity.scene.attachChild(holeMiddleSprite);
+
+        //Set left tree trunk
+        BitmapTextureAtlas treeTrunkTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 64, 128, TextureOptions.REPEATING_NEAREST_PREMULTIPLYALPHA);
+        TextureRegion treeTrunkTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(treeTrunkTexture, this.gameActivity, "tree_trunk.png", 0, 0);
+        treeTrunkTextureRegion.setTextureHeight(height);
+        treeTrunkTexture.load();
+        Sprite leftTreeTrunkSprite = new Sprite(-64, 0, treeTrunkTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, leftTreeTrunkSprite, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(leftTreeTrunkSprite);
+
+        //Set right tree trunk
+        Sprite rightTreeTrunkSprite = new Sprite(width, 0, treeTrunkTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, rightTreeTrunkSprite, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(rightTreeTrunkSprite);
+
+        //Set left tree top
+        BitmapTextureAtlas treeTopTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 240, 186, TextureOptions.DEFAULT);
+        TextureRegion treeTopTextureRegion = BitmapTextureAtlasTextureRegionFactory.createFromAsset(treeTopTexture, this.gameActivity, "tree_top.png", 0, 0);
+        treeTopTexture.load();
+        Sprite leftTreeTopSprite = new Sprite(-152, -93, treeTopTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsHelper.createTreeTopBody(this.gameActivity.physicsWorld, leftTreeTopSprite, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(leftTreeTopSprite);
+
+        //Set right tree top
+        Sprite rightTreeTopSprite = new Sprite(width - 88, -93, treeTopTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        PhysicsHelper.createTreeTopBody(this.gameActivity.physicsWorld, rightTreeTopSprite, BodyDef.BodyType.StaticBody, solidFixtureDef);
+        this.gameActivity.scene.attachChild(rightTreeTopSprite);
+    }
+
+    public void createMesh(final float x, final float y, ArrayList<Vector2> vertices) {
+        final FixtureDef meshFixtureDef = PhysicsFactory.createFixtureDef(0.5f, 0.5f, 0.5f);
+
+        List<Vector2> uniqueBodyVerticesTriangulated = new EarClippingTriangulator().computeTriangles(vertices);
+        float[] meshTriangles = new float[uniqueBodyVerticesTriangulated.size() * 3];
+        for(int i = 0; i < uniqueBodyVerticesTriangulated.size(); i++){
+            meshTriangles[i*3] = uniqueBodyVerticesTriangulated.get(i).x;
+            meshTriangles[i*3+1] = uniqueBodyVerticesTriangulated.get(i).y;
+            uniqueBodyVerticesTriangulated.get(i).mul(1/ PhysicsConstants.PIXEL_TO_METER_RATIO_DEFAULT);
+        }
+        Mesh mesh = new Mesh(x, y, meshTriangles, uniqueBodyVerticesTriangulated.size(), Mesh.DrawMode.TRIANGLES , this.gameActivity.getVertexBufferObjectManager());
+        mesh.setColor(Color.WHITE);
+        PhysicsFactory.createTrianglulatedBody(this.gameActivity.physicsWorld, mesh, uniqueBodyVerticesTriangulated, BodyDef.BodyType.StaticBody, meshFixtureDef);
+        this.gameActivity.scene.attachChild(mesh);
     }
 
     public AnimatedSprite createBoxFace(final float x, final float y, final float width, final float height, BodyDef.BodyType type) {
@@ -76,7 +203,12 @@ public class GameFactory {
 
     public AnimatedSprite createCircleFace(final float x, final float y, final float width, final float height, BodyDef.BodyType type) {
         final FixtureDef objectFixtureDef = PhysicsFactory.createFixtureDef(0.5f, 0.5f, 0.5f);
-        AnimatedSprite face = new AnimatedSprite(x, y, width, height, this.circleFaceTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        AnimatedSprite face;
+        if (width == 0 || height == 0) {
+            face = new AnimatedSprite(x, y, this.circleFaceTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        } else {
+            face = new AnimatedSprite(x, y, width, height, this.circleFaceTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        }
         Body body = PhysicsFactory.createCircleBody(this.gameActivity.physicsWorld, face, type, objectFixtureDef);
         face.animate(200);
         this.gameActivity.physicsWorld.registerPhysicsConnector(new PhysicsConnector(face, body, true, true));
