@@ -28,11 +28,12 @@ import org.andengine.util.color.Color;
 import java.util.ArrayList;
 import java.util.List;
 
+import banvillet.moledrop.item.PhysicalEntity;
 import banvillet.moledrop.physics.PhysicsHelper;
 
 /**
  * Contains the game activity: scene and physical world.
- * 
+ * <p/>
  * Created by lb185112 on 4/4/2016.
  */
 public class GameFactory {
@@ -83,6 +84,11 @@ public class GameFactory {
         Sprite groundSpriteRight = new Sprite(hole_X + 192, height, groundTextureRegion, this.gameActivity.getVertexBufferObjectManager());
         PhysicsFactory.createBoxBody(this.gameActivity.physicsWorld, groundSpriteRight, BodyDef.BodyType.StaticBody, solidFixtureDef);
         this.gameActivity.scene.attachChild(groundSpriteRight);
+
+        //Set ground under layer
+        Rectangle underGround = new Rectangle(-1000, height + 128, 2000, 400, this.gameActivity.getVertexBufferObjectManager());
+        underGround.setColor(89f / 255f, 74f / 255f, 63f / 255f);
+        this.gameActivity.scene.attachChild(underGround);
 
         //Set grass texture on the left
         BitmapTextureAtlas grassTexture = new BitmapTextureAtlas(this.gameActivity.getTextureManager(), 256, 5, TextureOptions.REPEATING_NEAREST_PREMULTIPLYALPHA);
@@ -171,20 +177,32 @@ public class GameFactory {
         this.gameActivity.scene.attachChild(rightTreeTopSprite);
     }
 
-    public void createMesh(final float x, final float y, ArrayList<Vector2> vertices) {
+    public PhysicalEntity createMesh(final float x, final float y, ArrayList<Vector2> vertices) {
         final FixtureDef meshFixtureDef = PhysicsFactory.createFixtureDef(0.5f, 0.5f, 0.5f);
 
         List<Vector2> uniqueBodyVerticesTriangulated = new EarClippingTriangulator().computeTriangles(vertices);
         float[] meshTriangles = new float[uniqueBodyVerticesTriangulated.size() * 3];
-        for(int i = 0; i < uniqueBodyVerticesTriangulated.size(); i++){
-            meshTriangles[i*3] = uniqueBodyVerticesTriangulated.get(i).x;
-            meshTriangles[i*3+1] = uniqueBodyVerticesTriangulated.get(i).y;
-            uniqueBodyVerticesTriangulated.get(i).mul(1/ PhysicsConstants.PIXEL_TO_METER_RATIO_DEFAULT);
+        for (int i = 0; i < uniqueBodyVerticesTriangulated.size(); i++) {
+            meshTriangles[i * 3] = uniqueBodyVerticesTriangulated.get(i).x;
+            meshTriangles[i * 3 + 1] = uniqueBodyVerticesTriangulated.get(i).y;
+            uniqueBodyVerticesTriangulated.get(i).mul(1 / PhysicsConstants.PIXEL_TO_METER_RATIO_DEFAULT);
         }
-        Mesh mesh = new Mesh(x, y, meshTriangles, uniqueBodyVerticesTriangulated.size(), Mesh.DrawMode.TRIANGLES , this.gameActivity.getVertexBufferObjectManager());
+        Mesh mesh = new Mesh(x, y, meshTriangles, uniqueBodyVerticesTriangulated.size(), Mesh.DrawMode.TRIANGLES, this.gameActivity.getVertexBufferObjectManager());
         mesh.setColor(Color.WHITE);
-        PhysicsFactory.createTrianglulatedBody(this.gameActivity.physicsWorld, mesh, uniqueBodyVerticesTriangulated, BodyDef.BodyType.StaticBody, meshFixtureDef);
+        Body body = PhysicsFactory.createTrianglulatedBody(this.gameActivity.physicsWorld, mesh, uniqueBodyVerticesTriangulated, BodyDef.BodyType.StaticBody, meshFixtureDef);
         this.gameActivity.scene.attachChild(mesh);
+        return new PhysicalEntity(mesh, body);
+    }
+
+    public PhysicalEntity createMole(final float x, final float y) {
+        final FixtureDef objectFixtureDef = PhysicsFactory.createFixtureDef(0.2f, 0.2f, 0.5f);
+        AnimatedSprite face;
+        face = new AnimatedSprite(x, y, this.circleFaceTextureRegion, this.gameActivity.getVertexBufferObjectManager());
+        Body body = PhysicsFactory.createCircleBody(this.gameActivity.physicsWorld, face, BodyDef.BodyType.StaticBody, objectFixtureDef);
+        face.animate(200);
+        this.gameActivity.physicsWorld.registerPhysicsConnector(new PhysicsConnector(face, body, true, true));
+        this.gameActivity.scene.attachChild(face);
+        return new PhysicalEntity(face, body);
     }
 
     public AnimatedSprite createBoxFace(final float x, final float y, final float width, final float height, BodyDef.BodyType type) {
